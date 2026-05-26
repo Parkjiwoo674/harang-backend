@@ -1,3 +1,6 @@
+import dotenv from 'dotenv'  // ← 추가
+dotenv.config()  
+
 import { z } from 'zod'
 
 // 환경 변수 스키마 정의

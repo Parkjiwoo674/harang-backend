@@ -4,7 +4,6 @@ import { verifyToken } from './lib/jwt'
 import prisma from './lib/prisma'
 
 export function initSocket(httpServer: HTTPServer) {
-  // CLIENT_URL 환경변수를 사용 (하드코딩된 localhost 제거)
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000'
 
   const io = new SocketIOServer(httpServer, {
@@ -33,19 +32,39 @@ export function initSocket(httpServer: HTTPServer) {
   io.on('connection', (socket) => {
     console.log(`✅ User ${socket.data.userName} connected`)
 
-    // 채팅방 입장
     socket.on('room:join', (roomId: number) => {
       socket.join(`room:${roomId}`)
     })
 
-    // 채팅방 퇴장
     socket.on('room:leave', (roomId: number) => {
       socket.leave(`room:${roomId}`)
     })
 
-    // 메시지 전송
+    // 메시지 전송 — isTeacherOnly 권한 체크 추가
     socket.on('message:send', async (data: { roomId: number; content: string }) => {
       try {
+        // 1) 방 존재 확인
+        const room = await prisma.room.findUnique({ where: { id: data.roomId } })
+        if (!room) {
+          socket.emit('error', { message: '채팅방을 찾을 수 없습니다' })
+          return
+        }
+        // 2) 선생님 전용 방 권한 체크
+        if (room.isTeacherOnly && !socket.data.isTeacher) {
+          socket.emit('error', { message: '선생님만 메시지를 보낼 수 있습니다' })
+          return
+        }
+        // 3) 멤버 여부 확인
+        const member = await prisma.roomMember.findUnique({
+          where: {
+            roomId_userId: { roomId: data.roomId, userId: socket.data.userId },
+          },
+        })
+        if (!member) {
+          socket.emit('error', { message: '채팅방 멤버가 아닙니다' })
+          return
+        }
+
         const msg = await prisma.message.create({
           data: {
             roomId: data.roomId,
@@ -74,7 +93,6 @@ export function initSocket(httpServer: HTTPServer) {
       }
     })
 
-    // 타이핑 중 표시 — roomId를 함께 전달해야 프론트에서 어느 방인지 알 수 있음
     socket.on('typing:start', (roomId: number) => {
       socket.to(`room:${roomId}`).emit('typing:user', {
         userId: socket.data.userId,

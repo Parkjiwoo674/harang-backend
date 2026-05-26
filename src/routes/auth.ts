@@ -77,7 +77,7 @@ router.post(
 
       // 교사 인증코드 검증
       if (data.role === "teacher") {
-        const code = await prisma.teacherCode.findUnique({
+        const code = await prisma.teachercode.findUnique({
           where: { code: data.teacher_code! },
         });
         if (!code)
@@ -114,7 +114,7 @@ router.post(
 
       // 사용된 코드 처리
       if (data.role === "teacher") {
-        await prisma.teacherCode.update({
+        await prisma.teachercode.update({
           where: { code: data.teacher_code! },
           data: { isUsed: true, usedById: user.id },
         });

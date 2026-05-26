@@ -7,230 +7,268 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id             Int      @id @default(autoincrement())
-  username       String   @unique
-  hashedPassword String
-  name           String
-  role           String   @default("student") // "student" | "teacher"
-  grade          Int?
-  classNum       Int?
-  number         Int?
-  subject        String?
-  homeroomGrade    Int?
-  homeroomClassNum Int?
-  avatarText     String   @default("?")
-  avatarColor    String   @default("#22c55e")
-  bio            String?
-  phone          String?
-  email          String
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+model announcement {
+  id               Int                @id @default(autoincrement())
+  title            String
+  content          String
+  category         String             @default("공지")
+  isPinned         Boolean            @default(false)
+  isUrgent         Boolean            @default(false)
+  authorId         Int
+  views            Int                @default(0)
+  createdAt        DateTime           @default(now())
+  user             user               @relation(fields: [authorId], references: [id], map: "Announcement_authorId_fkey")
+  announcementread announcementread[]
 
-  sentMessages      Message[]
-  announcements     Announcement[]
-  assignmentsCreated Assignment[]
-  submissions       Submission[]
-  qnaPosts          QnAPost[]
-  qnaAnswers        QnAAnswer[]
-  notifications     Notification[]
-  roomMemberships   RoomMember[]
-  reactions         Reaction[]
-  grades            Grade[]
-  createdRooms      Room[]
-  createdEvents     SchoolEvent[]
-  usedTeacherCodes  TeacherCode[] @relation("TeacherCodeUsage")
+  @@index([authorId], map: "Announcement_authorId_fkey")
 }
 
-model Room {
-  id            Int      @id @default(autoincrement())
-  kind          String   // class_notice | class_free | class_question | group | dm
-  name          String
-  emoji         String   @default("💬")
-  description   String?
-  isTeacherOnly Boolean  @default(false)
-  createdById   Int
-  createdAt     DateTime @default(now())
-
-  createdBy User         @relation(fields: [createdById], references: [id])
-  messages  Message[]
-  members   RoomMember[]
-}
-
-model RoomMember {
-  id       Int      @id @default(autoincrement())
-  roomId   Int
-  userId   Int
-  joinedAt DateTime @default(now())
-
-  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([roomId, userId])
-}
-
-model Message {
-  id        Int      @id @default(autoincrement())
-  roomId    Int
-  userId    Int
-  content   String
-  createdAt DateTime @default(now())
-
-  room      Room       @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  author    User       @relation(fields: [userId], references: [id])
-  reactions Reaction[]
-}
-
-model Reaction {
-  id        Int @id @default(autoincrement())
-  messageId Int
-  userId    Int
-  emoji     String
-
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
-
-  @@unique([messageId, userId, emoji])
-}
-
-model Announcement {
-  id         Int      @id @default(autoincrement())
-  title      String
-  content    String
-  category   String   @default("공지")
-  isPinned   Boolean  @default(false)
-  isUrgent   Boolean  @default(false)
-  authorId   Int
-  views      Int      @default(0)
-  createdAt  DateTime @default(now())
-
-  author User                @relation(fields: [authorId], references: [id])
-  reads  AnnouncementRead[]
-}
-
-model AnnouncementRead {
-  id             Int      @id @default(autoincrement())
+model announcementread {
+  id             Int          @id @default(autoincrement())
   announcementId Int
   userId         Int
-  readAt         DateTime @default(now())
+  readAt         DateTime     @default(now())
+  announcement   announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade, map: "AnnouncementRead_announcementId_fkey")
 
-  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
-
-  @@unique([announcementId, userId])
+  @@unique([announcementId, userId], map: "AnnouncementRead_announcementId_userId_key")
 }
 
-model Assignment {
-  id          Int      @id @default(autoincrement())
+model assignment {
+  id          Int          @id @default(autoincrement())
   title       String
   description String?
   subject     String
   teacherId   Int
   dueDate     DateTime
-  maxScore    Int      @default(100)
-  createdAt   DateTime @default(now())
+  maxScore    Int          @default(100)
+  createdAt   DateTime     @default(now())
+  user        user         @relation(fields: [teacherId], references: [id], map: "Assignment_teacherId_fkey")
+  submission  submission[]
 
-  teacher     User         @relation(fields: [teacherId], references: [id])
-  submissions Submission[]
+  @@index([teacherId], map: "Assignment_teacherId_fkey")
 }
 
-model Submission {
-  id           Int      @id @default(autoincrement())
-  assignmentId Int
-  studentId    Int
-  content      String?
-  fileName     String?
-  score        Int?
-  submittedAt  DateTime @default(now())
-
-  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student    User       @relation(fields: [studentId], references: [id])
-
-  @@unique([assignmentId, studentId])
-}
-
-model Grade {
-  id            Int    @id @default(autoincrement())
+model grade {
+  id            Int     @id @default(autoincrement())
   studentId     Int
   subject       String
   score         Int
   prevScore     Int?
   rank          Int?
-  totalStudents Int    @default(30)
-  semester      String @default("2024-2")
+  totalStudents Int     @default(30)
+  semester      String  @default("2024-2")
   teacher       String?
+  examType      String  @default("중간고사")
+  user          user    @relation("studentGrades", fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Grade_studentId_fkey")
 
-  student User @relation(fields: [studentId], references: [id])
-
-  @@unique([studentId, subject, semester])
+  @@unique([studentId, subject, semester, examType], map: "Grade_studentId_subject_semester_examType_key")
 }
 
-model Schedule {
-  id       Int    @id @default(autoincrement())
-  grade    Int
-  classNum Int
-  day      String // 월화수목금
-  period   Int    // 1-7
-  subject  String
-  teacher  String?
-  room     String?
+model message {
+  id        Int        @id @default(autoincrement())
+  roomId    Int
+  userId    Int
+  content   String
+  createdAt DateTime   @default(now())
+  room      room       @relation(fields: [roomId], references: [id], onDelete: Cascade, map: "Message_roomId_fkey")
+  user      user       @relation(fields: [userId], references: [id], map: "Message_userId_fkey")
+  reaction  reaction[]
+
+  @@index([roomId], map: "Message_roomId_fkey")
+  @@index([userId], map: "Message_userId_fkey")
 }
 
-model SchoolEvent {
-  id          Int      @id @default(autoincrement())
-  title       String
-  eventType   String   // 행사/시험/과제
-  eventDate   DateTime
-  description String?
-  createdById Int
+model notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  title     String
+  sender    String?
+  tag       String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      user     @relation(fields: [userId], references: [id], map: "Notification_userId_fkey")
 
-  createdBy User @relation(fields: [createdById], references: [id])
+  @@index([userId], map: "Notification_userId_fkey")
 }
 
-model QnAPost {
-  id         Int      @id @default(autoincrement())
-  title      String
-  content    String
-  subject    String
-  authorId   Int
-  likes      Int      @default(0)
-  isAnswered Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  author  User        @relation(fields: [authorId], references: [id])
-  answers QnAAnswer[]
-}
-
-model QnAAnswer {
+model qnaanswer {
   id         Int      @id @default(autoincrement())
   postId     Int
   content    String
   authorId   Int
   isAccepted Boolean  @default(false)
   createdAt  DateTime @default(now())
+  user       user     @relation(fields: [authorId], references: [id], map: "QnAAnswer_authorId_fkey")
+  qnapost    qnapost  @relation(fields: [postId], references: [id], onDelete: Cascade, map: "QnAAnswer_postId_fkey")
 
-  post   QnAPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author User    @relation(fields: [authorId], references: [id])
+  @@index([authorId], map: "QnAAnswer_authorId_fkey")
+  @@index([postId], map: "QnAAnswer_postId_fkey")
 }
 
-model TeacherCode {
+model qnalike {
   id        Int      @id @default(autoincrement())
-  code      String   @unique
+  postId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+  qnapost   qnapost  @relation(fields: [postId], references: [id], onDelete: Cascade, map: "QnALike_postId_fkey")
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "QnALike_userId_fkey")
+
+  @@unique([postId, userId], map: "QnALike_postId_userId_key")
+  @@index([userId], map: "QnALike_userId_fkey")
+}
+
+model qnapost {
+  id         Int         @id @default(autoincrement())
+  title      String
+  content    String
+  subject    String
+  authorId   Int
+  likes      Int         @default(0)
+  isAnswered Boolean     @default(false)
+  createdAt  DateTime    @default(now())
+  qnaanswer  qnaanswer[]
+  qnalike    qnalike[]
+  user       user        @relation(fields: [authorId], references: [id], map: "QnAPost_authorId_fkey")
+
+  @@index([authorId], map: "QnAPost_authorId_fkey")
+}
+
+model reaction {
+  id        Int     @id @default(autoincrement())
+  messageId Int
+  userId    Int
+  emoji     String
+  message   message @relation(fields: [messageId], references: [id], onDelete: Cascade, map: "Reaction_messageId_fkey")
+  user      user    @relation(fields: [userId], references: [id], map: "Reaction_userId_fkey")
+
+  @@unique([messageId, userId, emoji], map: "Reaction_messageId_userId_emoji_key")
+  @@index([userId], map: "Reaction_userId_fkey")
+}
+
+model room {
+  id            Int          @id @default(autoincrement())
+  kind          String
+  name          String
+  emoji         String       @default("?")
+  description   String?
+  isTeacherOnly Boolean      @default(false)
+  createdById   Int
+  createdAt     DateTime     @default(now())
+  message       message[]
+  user          user         @relation(fields: [createdById], references: [id], map: "Room_createdById_fkey")
+  roommember    roommember[]
+
+  @@index([createdById], map: "Room_createdById_fkey")
+}
+
+model roommember {
+  id       Int      @id @default(autoincrement())
+  roomId   Int
+  userId   Int
+  joinedAt DateTime @default(now())
+  room     room     @relation(fields: [roomId], references: [id], onDelete: Cascade, map: "RoomMember_roomId_fkey")
+  user     user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "RoomMember_userId_fkey")
+
+  @@unique([roomId, userId], map: "RoomMember_roomId_userId_key")
+  @@index([userId], map: "RoomMember_userId_fkey")
+}
+
+model schedule {
+  id       Int     @id @default(autoincrement())
+  grade    Int
+  classNum Int
+  day      String
+  period   Int
+  subject  String
+  teacher  String?
+  room     String?
+
+  @@unique([grade, classNum, day, period], map: "Schedule_grade_classNum_day_period_key")
+}
+
+model schoolevent {
+  id          Int      @id @default(autoincrement())
+  title       String
+  eventType   String
+  eventDate   DateTime
+  description String?
+  createdById Int
+  user        user     @relation(fields: [createdById], references: [id], map: "SchoolEvent_createdById_fkey")
+
+  @@index([createdById], map: "SchoolEvent_createdById_fkey")
+}
+
+model submission {
+  id           Int        @id @default(autoincrement())
+  assignmentId Int
+  studentId    Int
+  content      String?
+  fileName     String?
+  score        Int?
+  submittedAt  DateTime   @default(now())
+  assignment   assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, map: "Submission_assignmentId_fkey")
+  user         user       @relation(fields: [studentId], references: [id], map: "Submission_studentId_fkey")
+
+  @@unique([assignmentId, studentId], map: "Submission_assignmentId_studentId_key")
+  @@index([studentId], map: "Submission_studentId_fkey")
+}
+
+model teachercode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique(map: "TeacherCode_code_key")
   isUsed    Boolean  @default(false)
   usedById  Int?
   createdAt DateTime @default(now())
+  user      user?    @relation(fields: [usedById], references: [id], map: "TeacherCode_usedById_fkey")
 
-  usedBy    User?    @relation("TeacherCodeUsage", fields: [usedById], references: [id])
+  @@index([usedById], map: "TeacherCode_usedById_fkey")
 }
 
-model Notification {
+model user {
+  id               Int            @id @default(autoincrement())
+  username         String         @unique(map: "User_username_key")
+  hashedPassword   String
+  name             String
+  role             String         @default("student")
+  grade            Int?
+  classNum         Int?
+  number           Int?
+  subject          String?
+  homeroomGrade    Int?
+  homeroomClassNum Int?
+  avatarText       String         @default("?")
+  avatarColor      String         @default("#22c55e")
+  bio              String?
+  phone            String?
+  email            String
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  announcement     announcement[]
+  assignment       assignment[]
+  grades           grade[]        @relation("studentGrades")
+  message          message[]
+  notification     notification[]
+  qnaanswer        qnaanswer[]
+  qnalike          qnalike[]
+  qnapost          qnapost[]
+  reaction         reaction[]
+  room             room[]
+  roommember       roommember[]
+  schoolevent      schoolevent[]
+  submission       submission[]
+  teachercode      teachercode[]
+  passwordreset    passwordreset[]
+}
+
+model passwordreset {
   id        Int      @id @default(autoincrement())
   userId    Int
-  type      String   // notice | assign | chat
-  title     String
-  sender    String?
-  tag       String?
-  isRead    Boolean  @default(false)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
   createdAt DateTime @default(now())
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user User @relation(fields: [userId], references: [id])
+  @@index([userId])
 }

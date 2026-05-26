@@ -82,22 +82,28 @@ router.post('/rooms', requireAuth, async (req: AuthRequest, res: Response, next:
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
     const data = parsed.data
 
-    // DM 중복 체크
+    // DM 중복 체크 — 두 멤버가 정확히 일치하는 기존 방 탐색
     if (data.kind === 'dm' && data.member_ids.length === 2) {
-      const sorted = [...data.member_ids].sort((a, b) => a - b)
-      const existing = await prisma.room.findFirst({
+      const [idA, idB] = [...data.member_ids].sort((a, b) => a - b)
+
+      // 두 유저가 모두 속한 dm 방을 찾은 뒤, 멤버 수가 정확히 2명인지 확인
+      const candidates = await prisma.room.findMany({
         where: {
           kind: 'dm',
-          members: { every: { userId: { in: sorted } } },
+          AND: [
+            { members: { some: { userId: idA } } },
+            { members: { some: { userId: idB } } },
+          ],
         },
         include: roomInclude,
       })
-      if (existing) {
-        const memberIds = existing.members.map((m: any) => m.userId).sort()
-        if (JSON.stringify(memberIds) === JSON.stringify(sorted)) {
-          return res.json(formatRoom(existing, req.user!.id))
-        }
-      }
+
+      const existing = candidates.find((r: any) => {
+        const ids = r.members.map((m: any) => m.userId).sort((a: number, b: number) => a - b)
+        return ids.length === 2 && ids[0] === idA && ids[1] === idB
+      })
+
+      if (existing) return res.json(formatRoom(existing, req.user!.id))
     }
 
     const memberIds = [...new Set([...data.member_ids, req.user!.id])]

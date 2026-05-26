@@ -18,7 +18,7 @@ function formatAnswer(a: any) {
   }
 }
 
-function formatPost(p: any) {
+function formatPost(p: any, myId?: number) {
   return {
     id: p.id,
     title: p.title,
@@ -31,12 +31,15 @@ function formatPost(p: any) {
     created_at: p.createdAt,
     answer_count: p.answers?.length ?? 0,
     answers: (p.answers ?? []).map(formatAnswer),
+    // 현재 유저가 이미 좋아요 눌렀는지 여부
+    is_liked: myId ? (p.likedBy ?? []).some((l: any) => l.userId === myId) : false,
   }
 }
 
 const postInclude = {
   author: true,
   answers: { include: { author: true }, orderBy: { createdAt: 'asc' as const } },
+  likedBy: true,
 }
 
 // GET /api/qna
@@ -48,7 +51,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
       include: postInclude,
       orderBy: { createdAt: 'desc' },
     })
-    return res.json(posts.map(formatPost))
+    return res.json(posts.map((p: any) => formatPost(p, req.user!.id)))
   } catch (err) {
     next(err)
   }
@@ -69,7 +72,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: Next
       data: { ...parsed.data, authorId: req.user!.id },
       include: postInclude,
     })
-    return res.status(201).json(formatPost(post))
+    return res.status(201).json(formatPost(post, req.user!.id))
   } catch (err) {
     next(err)
   }
@@ -96,14 +99,34 @@ router.post('/:id/answers', requireAuth, async (req: AuthRequest, res: Response,
   }
 })
 
-// POST /api/qna/:id/like  — increment으로 동시성 안전하게 처리
+// POST /api/qna/:id/like — 토글 방식 (중복 방지)
 router.post('/:id/like', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const post = await prisma.qnAPost.update({
-      where: { id: Number(req.params.id) },
-      data: { likes: { increment: 1 } },
+    const postId = Number(req.params.id)
+    const userId = req.user!.id
+
+    const existing = await prisma.qnALike.findUnique({
+      where: { postId_userId: { postId, userId } },
     })
-    return res.json({ likes: post.likes })
+
+    let post
+    if (existing) {
+      // 이미 좋아요 → 취소
+      await prisma.qnALike.delete({ where: { id: existing.id } })
+      post = await prisma.qnAPost.update({
+        where: { id: postId },
+        data: { likes: { decrement: 1 } },
+      })
+      return res.json({ likes: post.likes, is_liked: false })
+    } else {
+      // 좋아요 추가
+      await prisma.qnALike.create({ data: { postId, userId } })
+      post = await prisma.qnAPost.update({
+        where: { id: postId },
+        data: { likes: { increment: 1 } },
+      })
+      return res.json({ likes: post.likes, is_liked: true })
+    }
   } catch (err) {
     next(err)
   }
