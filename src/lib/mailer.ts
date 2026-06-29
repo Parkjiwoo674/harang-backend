@@ -27,3 +27,12 @@ export async function sendPasswordResetEmail(to: string, code: string, name: str
     `,
   })
 }
+
+export async function sendMail({ to, subject, html }: { to: string; subject: string; html: string }) {
+  await transporter.sendMail({
+    from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
+    to,
+    subject,
+    html,
+  })
+}

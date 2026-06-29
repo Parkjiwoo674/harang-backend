@@ -4,6 +4,7 @@ import { z } from 'zod'
 import prisma from '../lib/prisma'
 import { signToken } from '../lib/jwt'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import { sendMail } from '../lib/mailer'
 
 const router = Router()
 
@@ -192,7 +193,6 @@ router.post('/send-verify-email', async (req: Request, res: Response, next: Next
       data: { email, code, token, expiresAt }
     })
 
-    const { sendMail } = await import('../lib/mailer')
     await sendMail({
       to: email,
       subject: '[하랑] 이메일 인증 코드',
