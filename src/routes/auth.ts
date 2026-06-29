@@ -178,4 +178,50 @@ export function formatUser(user: any) {
   };
 }
 
+// POST /api/auth/send-verify-email
+router.post('/send-verify-email', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body
+    if (!email) return res.status(400).json({ error: '이메일을 입력해주세요' })
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString()
+    const token = require('crypto').randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10분
+
+    await prisma.emailverify.create({
+      data: { email, code, token, expiresAt }
+    })
+
+    const { sendMail } = await import('../lib/mailer')
+    await sendMail({
+      to: email,
+      subject: '[하랑] 이메일 인증 코드',
+      html: `<p>인증 코드: <strong>${code}</strong></p><p>10분 이내에 입력해주세요.</p>`,
+    })
+
+    return res.json({ token })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/verify-email
+router.post('/verify-email', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { token, code } = req.body
+    if (!token || !code) return res.status(400).json({ error: '토큰과 코드를 입력해주세요' })
+
+    const record = await prisma.emailverify.findUnique({ where: { token } })
+    if (!record) return res.status(400).json({ error: '유효하지 않은 토큰입니다' })
+    if (record.expiresAt < new Date()) return res.status(400).json({ error: '인증 코드가 만료됐습니다' })
+    if (record.code !== code) return res.status(400).json({ error: '인증 코드가 올바르지 않습니다' })
+
+    await prisma.emailverify.delete({ where: { token } })
+
+    return res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router

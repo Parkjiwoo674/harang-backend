@@ -312,3 +312,12 @@ model personalevent {
 
   @@index([userId], map: "PersonalEvent_userId_fkey")
 }
+
+model emailverify {
+  id        Int      @id @default(autoincrement())
+  email     String
+  code      String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
