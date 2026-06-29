@@ -174,6 +174,7 @@ export function formatUser(user: any) {
     bio: user.bio,
     phone: user.phone,
     email: user.email,
+    profile_image: user.profileImage || null,
   };
 }
 

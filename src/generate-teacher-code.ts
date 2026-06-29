@@ -26,11 +26,11 @@ async function createCodes(count: number) {
   for (let i = 0; i < count; i++) {
     let code = generateCode()
     // 중복 체크
-    while (await prisma.teacherCode.findUnique({ where: { code } })) {
+    while (await prisma.teachercode.findUnique({ where: { code } })) {
       code = generateCode()
     }
     
-    await prisma.teacherCode.create({ data: { code } })
+    await prisma.teachercode.create({ data: { code } })
     codes.push(code)
   }
   
@@ -46,11 +46,11 @@ async function createCodes(count: number) {
 
 async function listCodes(filter?: string) {
   const where = filter === 'unused' ? { isUsed: false } : {}
-  const codes = await prisma.teacherCode.findMany({
+  const codes = await prisma.teachercode.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     include: {
-      usedBy: {
+      user: {
         select: { id: true, name: true, username: true }
       }
     }
@@ -69,8 +69,8 @@ async function listCodes(filter?: string) {
   
   codes.forEach(c => {
     const status = c.isUsed ? '✓ 사용됨' : '○ 미사용'
-    const user = c.isUsed && c.usedBy 
-      ? `${c.usedBy.name} (${c.usedBy.username})`
+    const user = c.isUsed && c.user 
+      ? `${c.user.name} (${c.user.username})`
       : '-'
     const date = c.createdAt.toISOString().split('T')[0]
     console.log(`${c.code}\t${status}\t\t${user}\t${date}`)
@@ -84,7 +84,7 @@ async function listCodes(filter?: string) {
 }
 
 async function deleteCode(code: string) {
-  const existing = await prisma.teacherCode.findUnique({ where: { code } })
+  const existing = await prisma.teachercode.findUnique({ where: { code } })
   
   if (!existing) {
     console.log(`\n❌ 코드 "${code}"를 찾을 수 없습니다.\n`)
@@ -97,7 +97,7 @@ async function deleteCode(code: string) {
     return
   }
   
-  await prisma.teacherCode.delete({ where: { code } })
+  await prisma.teachercode.delete({ where: { code } })
   console.log(`\n✅ 코드 "${code}"를 삭제했습니다.\n`)
 }
 

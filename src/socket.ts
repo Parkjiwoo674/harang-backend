@@ -32,64 +32,123 @@ export function initSocket(httpServer: HTTPServer) {
   io.on('connection', (socket) => {
     console.log(`✅ User ${socket.data.userName} connected`)
 
-    socket.on('room:join', (roomId: number) => {
+    // 방 입장 시 읽음 처리
+    socket.on('room:join', async (roomId: number) => {
       socket.join(`room:${roomId}`)
+      try {
+        const myId = socket.data.userId
+        const messages = await prisma.message.findMany({
+          where: { roomId, userId: { not: myId } },
+          select: { id: true },
+        })
+        if (messages.length > 0) {
+          await prisma.messageRead.createMany({
+            data: messages.map(m => ({ messageId: m.id, userId: myId })),
+            skipDuplicates: true,
+          })
+          // 읽은 메시지 ID 목록도 같이 브로드캐스트
+          socket.to(`room:${roomId}`).emit('message:read', {
+            room_id: roomId,
+            user_id: myId,
+            user_name: socket.data.userName,
+            message_ids: messages.map(m => m.id),
+          })
+        }
+      } catch (err) {
+        console.error('[Socket] room:join read error:', err)
+      }
     })
 
     socket.on('room:leave', (roomId: number) => {
       socket.leave(`room:${roomId}`)
     })
 
-    // 메시지 전송 — isTeacherOnly 권한 체크 추가
+    // 메시지 전송
     socket.on('message:send', async (data: { roomId: number; content: string }) => {
       try {
-        // 1) 방 존재 확인
         const room = await prisma.room.findUnique({ where: { id: data.roomId } })
-        if (!room) {
-          socket.emit('error', { message: '채팅방을 찾을 수 없습니다' })
-          return
-        }
-        // 2) 선생님 전용 방 권한 체크
+        if (!room) { socket.emit('error', { message: '채팅방을 찾을 수 없습니다' }); return }
         if (room.isTeacherOnly && !socket.data.isTeacher) {
-          socket.emit('error', { message: '선생님만 메시지를 보낼 수 있습니다' })
-          return
+          socket.emit('error', { message: '선생님만 메시지를 보낼 수 있습니다' }); return
         }
-        // 3) 멤버 여부 확인
         const member = await prisma.roomMember.findUnique({
-          where: {
-            roomId_userId: { roomId: data.roomId, userId: socket.data.userId },
-          },
+          where: { roomId_userId: { roomId: data.roomId, userId: socket.data.userId } },
         })
-        if (!member) {
-          socket.emit('error', { message: '채팅방 멤버가 아닙니다' })
-          return
-        }
+        if (!member) { socket.emit('error', { message: '채팅방 멤버가 아닙니다' }); return }
 
         const msg = await prisma.message.create({
-          data: {
-            roomId: data.roomId,
-            userId: socket.data.userId,
-            content: data.content,
-          },
-          include: { author: true, reactions: true },
+          data: { roomId: data.roomId, userId: socket.data.userId, content: data.content },
+          include: { author: true, reactions: true, reads: { include: { user: true } } },
+        })
+
+        // 현재 방에 접속 중인 멤버 자동 읽음 처리
+        const roomSockets = await io.in(`room:${data.roomId}`).fetchSockets()
+        const onlineUserIds = roomSockets
+          .map(s => s.data.userId)
+          .filter((id: number) => id !== socket.data.userId)
+
+        if (onlineUserIds.length > 0) {
+          await prisma.messageRead.createMany({
+            data: onlineUserIds.map((userId: number) => ({ messageId: msg.id, userId })),
+            skipDuplicates: true,
+          })
+        }
+
+        // 최신 reads 포함해서 다시 조회
+        const updatedMsg = await prisma.message.findUnique({
+          where: { id: msg.id },
+          include: { author: true, reactions: true, reads: { include: { user: true } } },
         })
 
         const formatted = {
-          id: msg.id,
-          room_id: msg.roomId,
-          user_id: msg.userId,
-          user_name: msg.author.name,
-          avatar_text: msg.author.avatarText,
-          avatar_color: msg.author.avatarColor,
-          is_teacher: msg.author.role === 'teacher',
-          content: msg.content,
-          created_at: msg.createdAt,
+          id: updatedMsg!.id,
+          room_id: updatedMsg!.roomId,
+          user_id: updatedMsg!.userId,
+          user_name: updatedMsg!.author.name,
+          avatar_text: updatedMsg!.author.avatarText,
+          avatar_color: updatedMsg!.author.avatarColor,
+          profile_image: (updatedMsg!.author as any).profileImage ?? null,
+          is_teacher: updatedMsg!.author.role === 'teacher',
+          content: updatedMsg!.content,
+          created_at: updatedMsg!.createdAt,
           reactions: [],
+          read_by: updatedMsg!.reads.map((r: any) => ({
+            user_id: r.userId,
+            user_name: r.user?.name ?? '',
+            read_at: r.readAt,
+          })),
+          read_count: updatedMsg!.reads.length,
         }
+
         io.to(`room:${data.roomId}`).emit('message:receive', formatted)
       } catch (err) {
         console.error('[Socket] message:send error:', err)
         socket.emit('error', { message: '메시지 전송 실패' })
+      }
+    })
+
+    // 클라이언트가 명시적으로 읽음 처리 요청
+    socket.on('message:read', async (data: { roomId: number }) => {
+      try {
+        const myId = socket.data.userId
+        const messages = await prisma.message.findMany({
+          where: { roomId: data.roomId, userId: { not: myId } },
+          select: { id: true },
+        })
+        if (messages.length > 0) {
+          await prisma.messageRead.createMany({
+            data: messages.map(m => ({ messageId: m.id, userId: myId })),
+            skipDuplicates: true,
+          })
+          socket.to(`room:${data.roomId}`).emit('message:read', {
+            room_id: data.roomId,
+            user_id: myId,
+            user_name: socket.data.userName,
+            message_ids: messages.map(m => m.id),
+          })
+        }
+      } catch (err) {
+        console.error('[Socket] message:read error:', err)
       }
     })
 

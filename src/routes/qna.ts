@@ -10,9 +10,9 @@ function formatAnswer(a: any) {
     id: a.id,
     content: a.content,
     author_id: a.authorId,
-    author_name: a.author?.name ?? '',
-    avatar_text: a.author?.avatarText ?? '?',
-    avatar_color: a.author?.avatarColor ?? '#22c55e',
+    author_name: a.user?.name ?? '',
+    avatar_text: a.user?.avatarText ?? '?',
+    avatar_color: a.user?.avatarColor ?? '#22c55e',
     is_accepted: a.isAccepted,
     created_at: a.createdAt,
   }
@@ -25,28 +25,28 @@ function formatPost(p: any, myId?: number) {
     content: p.content,
     subject: p.subject,
     author_id: p.authorId,
-    author_name: p.author?.name ?? '',
+    author_name: p.user?.name ?? '',
     likes: p.likes,
     is_answered: p.isAnswered,
     created_at: p.createdAt,
-    answer_count: p.answers?.length ?? 0,
-    answers: (p.answers ?? []).map(formatAnswer),
+    answer_count: p.qnaanswer?.length ?? 0,
+    answers: (p.qnaanswer ?? []).map(formatAnswer),
     // 현재 유저가 이미 좋아요 눌렀는지 여부
-    is_liked: myId ? (p.likedBy ?? []).some((l: any) => l.userId === myId) : false,
+    is_liked: myId ? (p.qnalike ?? []).some((l: any) => l.userId === myId) : false,
   }
 }
 
 const postInclude = {
-  author: true,
-  answers: { include: { author: true }, orderBy: { createdAt: 'asc' as const } },
-  likedBy: true,
+  user: true,
+  qnaanswer: { include: { user: true }, orderBy: { createdAt: 'asc' as const } },
+  qnalike: true,
 }
 
 // GET /api/qna
 router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const subject = req.query.subject as string | undefined
-    const posts = await prisma.qnAPost.findMany({
+    const posts = await prisma.qnapost.findMany({
       where: subject ? { subject } : undefined,
       include: postInclude,
       orderBy: { createdAt: 'desc' },
@@ -68,7 +68,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res: Response, next: Next
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
-    const post = await prisma.qnAPost.create({
+    const post = await prisma.qnapost.create({
       data: { ...parsed.data, authorId: req.user!.id },
       include: postInclude,
     })
@@ -87,11 +87,11 @@ router.post('/:id/answers', requireAuth, async (req: AuthRequest, res: Response,
 
     const postId = Number(req.params.id)
     const [answer] = await prisma.$transaction([
-      prisma.qnAAnswer.create({
+      prisma.qnaanswer.create({
         data: { postId, content: parsed.data.content, authorId: req.user!.id },
-        include: { author: true },
+        include: { user: true },
       }),
-      prisma.qnAPost.update({ where: { id: postId }, data: { isAnswered: true } }),
+      prisma.qnapost.update({ where: { id: postId }, data: { isAnswered: true } }),
     ])
     return res.status(201).json(formatAnswer(answer))
   } catch (err) {
@@ -105,23 +105,23 @@ router.post('/:id/like', requireAuth, async (req: AuthRequest, res: Response, ne
     const postId = Number(req.params.id)
     const userId = req.user!.id
 
-    const existing = await prisma.qnALike.findUnique({
+    const existing = await prisma.qnalike.findUnique({
       where: { postId_userId: { postId, userId } },
     })
 
     let post
     if (existing) {
       // 이미 좋아요 → 취소
-      await prisma.qnALike.delete({ where: { id: existing.id } })
-      post = await prisma.qnAPost.update({
+      await prisma.qnalike.delete({ where: { id: existing.id } })
+      post = await prisma.qnapost.update({
         where: { id: postId },
         data: { likes: { decrement: 1 } },
       })
       return res.json({ likes: post.likes, is_liked: false })
     } else {
       // 좋아요 추가
-      await prisma.qnALike.create({ data: { postId, userId } })
-      post = await prisma.qnAPost.update({
+      await prisma.qnalike.create({ data: { postId, userId } })
+      post = await prisma.qnapost.update({
         where: { id: postId },
         data: { likes: { increment: 1 } },
       })
@@ -135,15 +135,15 @@ router.post('/:id/like', requireAuth, async (req: AuthRequest, res: Response, ne
 // PATCH /api/qna/answers/:id/accept
 router.patch('/answers/:id/accept', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const answer = await prisma.qnAAnswer.findUnique({
+    const answer = await prisma.qnaanswer.findUnique({
       where: { id: Number(req.params.id) },
-      include: { post: true },
+      include: { qnapost: true },
     })
     if (!answer) return res.status(404).json({ error: '답변을 찾을 수 없습니다' })
-    if (answer.post.authorId !== req.user!.id && req.user!.role !== 'teacher') {
+    if (answer.qnapost.authorId !== req.user!.id && req.user!.role !== 'teacher') {
       return res.status(403).json({ error: '권한이 없습니다' })
     }
-    await prisma.qnAAnswer.update({ where: { id: answer.id }, data: { isAccepted: true } })
+    await prisma.qnaanswer.update({ where: { id: answer.id }, data: { isAccepted: true } })
     return res.json({ ok: true })
   } catch (err) {
     next(err)

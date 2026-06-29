@@ -17,13 +17,13 @@ model announcement {
   authorId         Int
   views            Int                @default(0)
   createdAt        DateTime           @default(now())
-  user             user               @relation(fields: [authorId], references: [id], map: "Announcement_authorId_fkey")
-  announcementread announcementread[]
+  author           user               @relation("AnnouncementAuthor", fields: [authorId], references: [id], map: "Announcement_authorId_fkey")
+  reads            AnnouncementRead[]
 
   @@index([authorId], map: "Announcement_authorId_fkey")
 }
 
-model announcementread {
+model AnnouncementRead {
   id             Int          @id @default(autoincrement())
   announcementId Int
   userId         Int
@@ -31,6 +31,7 @@ model announcementread {
   announcement   announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade, map: "AnnouncementRead_announcementId_fkey")
 
   @@unique([announcementId, userId], map: "AnnouncementRead_announcementId_userId_key")
+  @@map("announcementread")
 }
 
 model assignment {
@@ -38,12 +39,14 @@ model assignment {
   title       String
   description String?
   subject     String
+  fileName    String?
+  fileUrl     String?
   teacherId   Int
   dueDate     DateTime
   maxScore    Int          @default(100)
   createdAt   DateTime     @default(now())
-  user        user         @relation(fields: [teacherId], references: [id], map: "Assignment_teacherId_fkey")
-  submission  submission[]
+  teacher     user         @relation("AssignmentTeacher", fields: [teacherId], references: [id], map: "Assignment_teacherId_fkey")
+  submissions submission[]
 
   @@index([teacherId], map: "Assignment_teacherId_fkey")
 }
@@ -56,12 +59,16 @@ model grade {
   prevScore     Int?
   rank          Int?
   totalStudents Int     @default(30)
-  semester      String  @default("2024-2")
+  semester      String  @default("1-1")
   teacher       String?
+  teacherId     Int?
   examType      String  @default("중간고사")
+  examName      String?
   user          user    @relation("studentGrades", fields: [studentId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Grade_studentId_fkey")
+  teacherUser   user?   @relation("teacherGrades", fields: [teacherId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@unique([studentId, subject, semester, examType], map: "Grade_studentId_subject_semester_examType_key")
+  @@unique([studentId, subject, semester, examName], map: "Grade_studentId_subject_semester_examName_key")
+  @@index([teacherId], map: "Grade_teacherId_fkey")
 }
 
 model message {
@@ -71,8 +78,9 @@ model message {
   content   String
   createdAt DateTime   @default(now())
   room      room       @relation(fields: [roomId], references: [id], onDelete: Cascade, map: "Message_roomId_fkey")
-  user      user       @relation(fields: [userId], references: [id], map: "Message_userId_fkey")
-  reaction  reaction[]
+  author    user       @relation("MessageAuthor", fields: [userId], references: [id], map: "Message_userId_fkey")
+  reactions reaction[]
+  reads     MessageRead[]
 
   @@index([roomId], map: "Message_roomId_fkey")
   @@index([userId], map: "Message_userId_fkey")
@@ -155,14 +163,14 @@ model room {
   isTeacherOnly Boolean      @default(false)
   createdById   Int
   createdAt     DateTime     @default(now())
-  message       message[]
+  messages      message[]
+  members       RoomMember[]
   user          user         @relation(fields: [createdById], references: [id], map: "Room_createdById_fkey")
-  roommember    roommember[]
 
   @@index([createdById], map: "Room_createdById_fkey")
 }
 
-model roommember {
+model RoomMember {
   id       Int      @id @default(autoincrement())
   roomId   Int
   userId   Int
@@ -172,6 +180,7 @@ model roommember {
 
   @@unique([roomId, userId], map: "RoomMember_roomId_userId_key")
   @@index([userId], map: "RoomMember_userId_fkey")
+  @@map("roommember")
 }
 
 model schedule {
@@ -190,7 +199,7 @@ model schedule {
 model schoolevent {
   id          Int      @id @default(autoincrement())
   title       String
-  eventType   String
+  eventType   String?
   eventDate   DateTime
   description String?
   createdById Int
@@ -205,10 +214,11 @@ model submission {
   studentId    Int
   content      String?
   fileName     String?
+  fileUrl      String?
   score        Int?
   submittedAt  DateTime   @default(now())
   assignment   assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade, map: "Submission_assignmentId_fkey")
-  user         user       @relation(fields: [studentId], references: [id], map: "Submission_studentId_fkey")
+  student      user       @relation("SubmissionStudent", fields: [studentId], references: [id], map: "Submission_studentId_fkey")
 
   @@unique([assignmentId, studentId], map: "Submission_assignmentId_studentId_key")
   @@index([studentId], map: "Submission_studentId_fkey")
@@ -226,49 +236,79 @@ model teachercode {
 }
 
 model user {
-  id               Int            @id @default(autoincrement())
-  username         String         @unique(map: "User_username_key")
+  id               Int              @id @default(autoincrement())
+  username         String           @unique(map: "User_username_key")
   hashedPassword   String
   name             String
-  role             String         @default("student")
+  role             String           @default("student")
   grade            Int?
   classNum         Int?
   number           Int?
   subject          String?
   homeroomGrade    Int?
   homeroomClassNum Int?
-  avatarText       String         @default("?")
-  avatarColor      String         @default("#22c55e")
+  avatarText       String           @default("?")
+  avatarColor      String           @default("#22c55e")
+  profileImage     String?          // ← 이거 추가됨
   bio              String?
   phone            String?
   email            String
-  isActive         Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  announcement     announcement[]
-  assignment       assignment[]
-  grades           grade[]        @relation("studentGrades")
-  message          message[]
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  announcement     announcement[]   @relation("AnnouncementAuthor")
+  assignment       assignment[]     @relation("AssignmentTeacher")
+  grades           grade[]          @relation("studentGrades")
+  message          message[]        @relation("MessageAuthor")
   notification     notification[]
   qnaanswer        qnaanswer[]
   qnalike          qnalike[]
   qnapost          qnapost[]
   reaction         reaction[]
   room             room[]
-  roommember       roommember[]
+  roommember       RoomMember[]
   schoolevent      schoolevent[]
-  submission       submission[]
+  submission       submission[]     @relation("SubmissionStudent")
   teachercode      teachercode[]
   passwordreset    passwordreset[]
+  teacherGrades    grade[]          @relation("teacherGrades")
+  messageRead      MessageRead[]
+  personalevent    personalevent[]
+}
+
+model MessageRead {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  userId    Int
+  readAt    DateTime @default(now())
+  message   message  @relation(fields: [messageId], references: [id], onDelete: Cascade, map: "MessageRead_messageId_fkey")
+  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "MessageRead_userId_fkey")
+
+  @@unique([messageId, userId], map: "MessageRead_messageId_userId_key")
+  @@index([userId], map: "MessageRead_userId_fkey")
+  @@map("messageread")
 }
 
 model passwordreset {
   id        Int      @id @default(autoincrement())
-  userId    Int
+  userId    Int?
   token     String   @unique
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
-  user      user     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      user?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model personalevent {
+  id          Int      @id @default(autoincrement())
+  title       String
+  eventDate   DateTime
+  description String?
+  color       String?  @default("#1a7a6e")
+  userId      Int
+  createdAt   DateTime @default(now())
+  user        user     @relation(fields: [userId], references: [id], onDelete: Cascade, map: "PersonalEvent_userId_fkey")
+
+  @@index([userId], map: "PersonalEvent_userId_fkey")
 }

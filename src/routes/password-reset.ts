@@ -113,7 +113,7 @@ router.post('/reset-password', async (req: Request, res: Response, next: NextFun
     // 비밀번호 변경 + 토큰 사용 처리
     await prisma.$transaction([
       prisma.user.update({
-        where: { id: reset.userId },
+        where: { id: reset.userId ?? 0 },
         data: { hashedPassword: await bcrypt.hash(new_password, 10) },
       }),
       prisma.passwordreset.update({
@@ -123,6 +123,67 @@ router.post('/reset-password', async (req: Request, res: Response, next: NextFun
     ])
 
     return res.json({ message: '비밀번호가 변경되었습니다. 새 비밀번호로 로그인해주세요.' })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/send-verify-email — 회원가입 이메일 인증코드 발송
+router.post('/send-verify-email', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({ email: z.string().email() })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: '올바른 이메일을 입력해주세요' })
+
+    const { email } = parsed.data
+
+    const code = generateCode()
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
+
+    // 이메일 인증은 userId 없이 저장 (userId를 nullable로)
+    await prisma.passwordreset.create({
+      data: {
+        userId: 0, // 임시값 (회원가입 전이라 userId 없음)
+        token: `signup:${token}:${code}`,
+        expiresAt,
+      },
+    })
+
+    await sendPasswordResetEmail(email, code, '회원')
+
+    return res.json({ token })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/verify-email — 회원가입 이메일 인증코드 확인
+router.post('/verify-email', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({ token: z.string(), code: z.string().length(6) })
+    const parsed = schema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: '올바른 형식이 아닙니다' })
+
+    const { token, code } = parsed.data
+
+    const reset = await prisma.passwordreset.findFirst({
+      where: {
+        token: `signup:${token}:${code}`,
+        used: false,
+        expiresAt: { gt: new Date() },
+      },
+    })
+
+    if (!reset) return res.status(400).json({ error: '인증코드가 올바르지 않거나 만료되었습니다' })
+
+    // 인증 완료 처리
+    await prisma.passwordreset.update({
+      where: { id: reset.id },
+      data: { used: true },
+    })
+
+    return res.json({ ok: true })
   } catch (err) {
     next(err)
   }

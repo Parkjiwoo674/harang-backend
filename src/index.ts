@@ -4,6 +4,7 @@ dotenv.config()
 import { env } from './lib/env'
 
 import express, { Request, Response, NextFunction } from 'express'
+import path from 'path'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
@@ -24,6 +25,7 @@ import scheduleRouter from './routes/schedule'
 import qnaRouter from './routes/qna'
 import notificationsRouter from './routes/notifications'
 import adminRouter from './routes/admin'
+import mealRouter from './routes/meal'
 import passwordResetRouter from './routes/password-reset'
 
 const app = express()
@@ -36,8 +38,8 @@ app.use(express.json({ limit: '10mb' }))
 app.use(requestLogger)
 
 const globalLimiter = rateLimit({
-  windowMs: 0 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000,
+  max: 500,
   message: { error: '너무 많은 요청을 보냈습니다. 잠시 후 다시 시도해주세요.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -62,6 +64,12 @@ app.get('/health', async (_req: Request, res: Response) => {
   }
 })
 
+app.use('/uploads', (req: any, res: any, next: any) => {
+  res.header('Access-Control-Allow-Origin', CLIENT_URL)
+  res.header('Cross-Origin-Resource-Policy', 'cross-origin')
+  next()
+}, express.static(path.join(process.cwd(), 'uploads')))
+
 app.use('/api/auth/login', authLimiter)
 app.use('/api/auth/signup', authLimiter)
 app.use('/api/auth', authRouter)
@@ -74,6 +82,7 @@ app.use('/api/schedule', scheduleRouter)
 app.use('/api/qna', qnaRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/meal', mealRouter)
 app.use('/api/auth', passwordResetRouter)
 
 app.get('/', (_req: Request, res: Response) => {
