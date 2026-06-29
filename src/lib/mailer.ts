@@ -1,12 +1,17 @@
 import nodemailer from 'nodemailer'
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
   },
-})
+  tls: {
+    rejectUnauthorized: false,
+  },
+} as any)
 
 export async function sendPasswordResetEmail(to: string, code: string, name: string) {
   await transporter.sendMail({
