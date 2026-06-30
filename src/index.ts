@@ -32,6 +32,7 @@ const app = express()
 const PORT = Number(env.PORT)
 const CLIENT_URL = env.CLIENT_URL
 
+app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({ origin: CLIENT_URL, credentials: true }))
 app.use(express.json({ limit: '10mb' }))

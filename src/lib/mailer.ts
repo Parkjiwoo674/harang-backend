@@ -1,4 +1,9 @@
+// backend/src/lib/mailer.ts
 import nodemailer from 'nodemailer'
+
+if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+  console.warn('[mailer] ⚠️  MAIL_USER 또는 MAIL_PASS 환경변수가 설정되지 않았습니다. 이메일 전송이 실패합니다.')
+}
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
