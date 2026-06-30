@@ -51,16 +51,32 @@ function formatAssignment(a: any, submittedMap: Map<number, number>) {
     teacher_name: a.teacher?.name ?? '',
     due_date: a.dueDate,
     max_score: a.maxScore,
+    target_grade: a.targetGrade,
+    target_class: a.targetClass,
     created_at: a.createdAt,
     is_submitted: submittedMap.has(a.id),
     submission_id: submittedMap.get(a.id) ?? null,
   }
 }
 
-// GET /api/assignments
+// GET /api/assignments — 학생은 본인 학년/반 과제만, 교사는 본인이 등록한 과제만 조회
 router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    const where: any = {}
+    if (req.user!.role === 'student') {
+      const student = await prisma.user.findUnique({ where: { id: req.user!.id } })
+      if (!student?.grade || !student?.classNum) {
+        return res.json([]) // 학년/반 정보 없으면 빈 목록
+      }
+      where.targetGrade = student.grade
+      where.targetClass = student.classNum
+    } else {
+      // 교사는 본인이 등록한 과제만 관리
+      where.teacherId = req.user!.id
+    }
+
     const assignments = await prisma.assignment.findMany({
+      where,
       include: { teacher: true, submissions: true },
       orderBy: { dueDate: 'asc' },
     })
@@ -77,7 +93,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res: Response, next: NextF
   }
 })
 
-// POST /api/assignments — 담당 과목 교사가 과제 등록 (첨부파일 선택)
+// POST /api/assignments — 담당 과목 교사가 특정 학년/반을 대상으로 과제 등록 (첨부파일 선택)
 router.post('/', requireAuth, requireTeacher, uploadAssignmentFile.single('file'), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     // 과제 과목은 클라이언트가 정하는 게 아니라, 로그인한 교사 본인의 담당 과목으로 고정한다.
@@ -91,6 +107,8 @@ router.post('/', requireAuth, requireTeacher, uploadAssignmentFile.single('file'
       description: z.string().optional(),
       due_date: z.string().datetime(),
       max_score: z.coerce.number().int().default(100),
+      target_grade: z.coerce.number().int().min(1).max(3),
+      target_class: z.coerce.number().int().min(1),
     })
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
@@ -106,12 +124,16 @@ router.post('/', requireAuth, requireTeacher, uploadAssignmentFile.single('file'
         teacherId: req.user!.id,
         dueDate: new Date(data.due_date),
         maxScore: data.max_score,
+        targetGrade: data.target_grade,
+        targetClass: data.target_class,
       },
       include: { teacher: true, submissions: true },
     })
 
-    // 학생 알림
-    const students = await prisma.user.findMany({ where: { role: 'student', isActive: true } })
+    // 해당 학년/반 학생에게만 알림
+    const students = await prisma.user.findMany({
+      where: { role: 'student', isActive: true, grade: data.target_grade, classNum: data.target_class },
+    })
     if (students.length > 0) {
       await prisma.notification.createMany({
         data: students.map((s: { id: number }) => ({

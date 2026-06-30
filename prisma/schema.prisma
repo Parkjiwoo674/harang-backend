@@ -44,6 +44,8 @@ model assignment {
   teacherId   Int
   dueDate     DateTime
   maxScore    Int          @default(100)
+  targetGrade Int
+  targetClass Int
   createdAt   DateTime     @default(now())
   teacher     user         @relation("AssignmentTeacher", fields: [teacherId], references: [id], map: "Assignment_teacherId_fkey")
   submissions submission[]
