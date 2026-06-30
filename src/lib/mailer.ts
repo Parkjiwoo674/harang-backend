@@ -6,7 +6,7 @@ if (!process.env.BREVO_API_KEY) {
 
 const client = new BrevoClient({ apiKey: process.env.BREVO_API_KEY || '' })
 
-const FROM = { email: 'bagj96792@gmail.com', name: 'Harang 학교 소통 플랫폼' }
+const FROM = { email: 'harangsch@gmail.com', name: 'Harang 학교 소통 플랫폼' }
 
 export async function sendPasswordResetEmail(to: string, code: string, name: string) {
   await client.transactionalEmails.sendTransacEmail({
