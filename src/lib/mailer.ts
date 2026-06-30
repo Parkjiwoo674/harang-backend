@@ -9,6 +9,10 @@ const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 587,
   secure: false,
+  family: 4,
+  connectionTimeout: 20000,
+  greetingTimeout: 20000,
+  socketTimeout: 20000,
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
@@ -39,10 +43,20 @@ export async function sendPasswordResetEmail(to: string, code: string, name: str
 }
 
 export async function sendMail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  await transporter.sendMail({
-    from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
-    to,
-    subject,
-    html,
-  })
+  try {
+    await transporter.verify();
+    console.log("SMTP 연결 성공");
+
+    await transporter.sendMail({
+      from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
+      to,
+      subject,
+      html,
+    });
+
+    console.log("메일 전송 성공");
+  } catch (err) {
+    console.error("메일 전송 실패:", err);
+    throw err;
+  }
 }
