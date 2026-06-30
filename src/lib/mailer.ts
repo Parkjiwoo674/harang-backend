@@ -1,26 +1,18 @@
-// backend/src/lib/mailer.ts
 import nodemailer from 'nodemailer'
 
 if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
-  console.warn('[mailer] ⚠️  MAIL_USER 또는 MAIL_PASS 환경변수가 설정되지 않았습니다. 이메일 전송이 실패합니다.')
+  console.warn('[mailer] ⚠️  MAIL_USER 또는 MAIL_PASS 환경변수가 설정되지 않았습니다.')
 }
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
+  host: 'smtp-relay.brevo.com',
   port: 587,
   secure: false,
-  family: 4,
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
-} as any)
+})
 
 export async function sendPasswordResetEmail(to: string, code: string, name: string) {
   await transporter.sendMail({
@@ -43,20 +35,10 @@ export async function sendPasswordResetEmail(to: string, code: string, name: str
 }
 
 export async function sendMail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  try {
-    await transporter.verify();
-    console.log("SMTP 연결 성공");
-
-    await transporter.sendMail({
-      from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
-      to,
-      subject,
-      html,
-    });
-
-    console.log("메일 전송 성공");
-  } catch (err) {
-    console.error("메일 전송 실패:", err);
-    throw err;
-  }
+  await transporter.sendMail({
+    from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
+    to,
+    subject,
+    html,
+  })
 }

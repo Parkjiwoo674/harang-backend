@@ -31,6 +31,7 @@
     "multer": "^2.2.0",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^8.0.8",
+    "resend": "^6.16.0",
     "socket.io": "^4.8.3",
     "winston": "^3.11.0",
     "zod": "^3.23.8"
