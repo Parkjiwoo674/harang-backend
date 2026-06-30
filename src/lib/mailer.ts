@@ -1,25 +1,19 @@
-import nodemailer from 'nodemailer'
+import { BrevoClient } from '@getbrevo/brevo'
 
-if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
-  console.warn('[mailer] ⚠️  MAIL_USER 또는 MAIL_PASS 환경변수가 설정되지 않았습니다.')
+if (!process.env.BREVO_API_KEY) {
+  console.warn('[mailer] ⚠️  BREVO_API_KEY 환경변수가 설정되지 않았습니다. 이메일 전송이 실패합니다.')
 }
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-})
+const client = new BrevoClient({ apiKey: process.env.BREVO_API_KEY || '' })
+
+const FROM = { email: 'b06355001@smtp-brevo.com', name: 'Harang 학교 소통 플랫폼' }
 
 export async function sendPasswordResetEmail(to: string, code: string, name: string) {
-  await transporter.sendMail({
-    from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
-    to,
+  await client.transactionalEmails.sendTransacEmail({
+    sender: FROM,
+    to: [{ email: to }],
     subject: '[Harang] 비밀번호 재설정 인증코드',
-    html: `
+    htmlContent: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e2e8e6; border-radius: 12px;">
         <h2 style="color: #1a7a6e; margin-bottom: 8px;">비밀번호 재설정</h2>
         <p style="color: #3d5a56; margin-bottom: 24px;">안녕하세요, <strong>${name}</strong>님!</p>
@@ -35,10 +29,10 @@ export async function sendPasswordResetEmail(to: string, code: string, name: str
 }
 
 export async function sendMail({ to, subject, html }: { to: string; subject: string; html: string }) {
-  await transporter.sendMail({
-    from: `"Harang 학교 소통 플랫폼" <${process.env.MAIL_USER}>`,
-    to,
+  await client.transactionalEmails.sendTransacEmail({
+    sender: FROM,
+    to: [{ email: to }],
     subject,
-    html,
+    htmlContent: html,
   })
 }

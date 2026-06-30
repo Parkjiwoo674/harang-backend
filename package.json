@@ -18,6 +18,7 @@
     "delete-code": "tsx src/generate-teacher-code.ts delete"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^5.0.4",
     "@prisma/client": "5.15.0",
     "@types/socket.io": "^3.0.1",
     "bcryptjs": "^2.4.3",
